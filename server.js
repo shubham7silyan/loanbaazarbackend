@@ -12,11 +12,29 @@ const PORT = process.env.PORT || 5000; // Use environment port or fallback to 50
 
 // CORS Configuration for production
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://loanbaazar.in', 'https://www.loanbaazar.in']
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://loanbaazar.in',
+      'https://www.loanbaazar.in',
+      'https://loanbaazarfrontend-production.up.railway.app',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000'
+    ];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 // Middleware
