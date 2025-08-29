@@ -3,7 +3,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
@@ -56,17 +55,6 @@ const corsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
-
-// Google Sheets Configuration
-const sheets = google.sheets('v4');
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    type: 'service_account',
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  },
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/contactDatabase";
@@ -231,6 +219,13 @@ app.post('/api/contact', async (req, res) => {
   try {
     const { name, email, phone, message } = req.body;
 
+    // Validate required fields
+    if (!name || !email || !phone || !message) {
+      return res.status(400).json({ 
+        error: "All fields are required" 
+      });
+    }
+
     // Save to database with isRead field explicitly set
     const newContact = new Contact({ 
       name, 
@@ -239,67 +234,21 @@ app.post('/api/contact', async (req, res) => {
       message, 
       isRead: false 
     });
-    await newContact.save();
+    
+    const savedContact = await newContact.save();
+    console.log('Contact saved successfully:', savedContact._id);
 
-    // Append to Google Sheets
-    const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
-    const range = 'Sheet1!A1:D1'; // Change to your sheet range
-    const valueInputOption = 'USER_ENTERED';
-    const insertDataOption = 'INSERT_ROWS';
-    const valueRangeBody = {
-      "majorDimension": "ROWS",
-      "range": range,
-      "values": [[name, email, phone, message]],
-    };
-
-    const client = await auth.getClient();
-    sheets.spreadsheets.values.append({
-      auth: client,
-      spreadsheetId: spreadsheetId,
-      range: range,
-      valueInputOption: valueInputOption,
-      insertDataOption: insertDataOption,
-      requestBody: valueRangeBody,
-    }, (err, response) => {
-      if (err) {
-        console.error('Error appending to Google Sheets:', err);
-      } else {
-        console.log('Appended to Google Sheets successfully!');
-      }
-    });
-
-    // Send confirmation email to user (optional)
-    // You can use a library like nodemailer or a service like Sendgrid to send emails
-    // For now, this is commented out
-    // const userMailOptions = {
-    //   from: process.env.EMAIL_FROM,
-    //   to: email,
-    //   subject: 'Thank you for contacting LoanBazar',
-    //   html: `
-    //     <h2>Thank you for your inquiry!</h2>
-    //     <p>Dear ${name},</p>
-    //     <p>We have received your message and will get back to you within 24 hours.</p>
-        
-    //     <h3>Your submission details:</h3>
-    //     <p><strong>Name:</strong> ${name}</p>
-    //     <p><strong>Email:</strong> ${email}</p>
-    //     <p><strong>Phone:</strong> ${phone}</p>
-    //     <p><strong>Message:</strong> ${message}</p>
-        
-    //     <p>Best regards,<br>LoanBazar Team</p>
-    //     <hr>
-    //     <p><em>This is an automated message. Please do not reply to this email.</em></p>
-    //   `
-    // };
-
+    // Send success response
     res.status(201).json({ 
-      message: "Contact form submitted successfully!" 
+      message: "Contact form submitted successfully!",
+      contactId: savedContact._id
     });
 
   } catch (err) {
-    console.error('Error:', err);
+    console.error('Contact form submission error:', err);
     res.status(500).json({ 
-      error: "Failed to submit contact form" 
+      error: "Failed to submit contact form",
+      details: err.message
     });
   }
 });
